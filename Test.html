@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>To-Do List </title>
+
+  <style>
+    :root{font-family:Inter,system-ui,Arial;--accent: #465be5
+    }
+    body{background:#f6f7fb;margin:0;padding:24px;display:flex;justify-content:center}
+    .card{width:100%;max-width:640px;background:#fff;padding:20px;border-radius:12px;box-shadow:0 6px 18px rgba(20,20,50,0.06)}
+    h1{margin:0 0 12px;font-size:20px}
+    .controls{display:flex;gap:8px;margin-bottom:12px}
+    input[type="text"]{flex:1;padding:10px;border:1px solid #e6e8ee;border-radius:8px;font-size:14px}
+    button{padding:10px 12px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer}
+    .small-btn{background:transparent;color:var(--accent);border:1px solid #eef; padding:6px 8px}
+    ul{list-style:none;padding:0;margin:12px 0}
+    li{display:flex;align-items:center;justify-content:space-between;padding:10px;border-radius:8px;border:1px solid #f0f2f7;margin-bottom:8px;background:#fff}
+    .task-left{display:flex;align-items:center;gap:10px;flex:1}
+    .task-left .text{user-select:none}
+    .task-left input[type="checkbox"]{width:18px;height:18px}
+    li.done .text{ text-decoration:line-through; opacity:0.6 }
+    .meta{display:flex;gap:8px;align-items:center;margin-top:6px;color:#666;font-size:13px}
+    .filters{display:flex;gap:8px}
+    .filters button{background:transparent;color:#333;border:1px solid transparent;padding:6px 8px;border-radius:8px}
+    .filters button.active{border-color:#e6e8ee;background:#f2f4ff;color:var(--accent)}
+    .list-enter-active, .list-leave-active { transition: all .25s ease; }
+    .list-enter-from { opacity:0; transform: translateY(-6px); }
+    .list-leave-to { opacity:0; transform: translateY(6px); }
+    @media(max-width:420px){ .card{padding:14px} h1{font-size:18px} }
+  </style>
+</head>
+<body>
+  <div id="app" class="card" role="application" aria-label="To-Do Vue">
+    <h1>To-Do List</h1>
+
+    <div class="controls">
+      <input
+        v-model="newTask"
+        @keyup.enter="addTask"
+        placeholder="Ajouter une tâche et appuye sur Entrée"
+        aria-label="Nouvelle tâche"
+      />
+      <button @click="addTask">Ajouter</button>
+      <button class="small-btn" @click="clearCompleted" title="Supprimer toutes les tâches terminées">Clear ✓</button>
+    </div>
+
+    <div class="meta">
+      <div><strong>{{ remaining }}</strong> à faire</div>
+      <div style="margin-left:auto" class="filters">
+        <button :class="{active: filter === 'all'}" @click="filter='all'">Toutes</button>
+        <button :class="{active: filter === 'active'}" @click="filter='active'">Actives</button>
+        <button :class="{active: filter === 'completed'}" @click="filter='completed'">Terminées</button>
+      </div>
+    </div>
+
+    <transition-group name="list" tag="ul">
+      <li v-for="task in filteredTasks" :key="task.id" :class="{done: task.done}">
+        <label class="task-left">
+          <input type="checkbox" v-model="task.done" @change="save" aria-label="Marquer comme fait" />
+          <!-- texte ou champ d'édition -->
+          <span v-if="!isEditing(task)" class="text" @dblclick="startEdit(task)">{{ task.text }}</span>
+          <input v-else
+                 ref="editInput"
+                 v-model="editText"
+                 @keyup.enter="finishEdit(task)"
+                 @blur="finishEdit(task)"
+                 placeholder="Modifier la tâche" />
+        </label>
+
+        <div class="task-right">
+          <button @click="removeTask(task.id)" aria-label="Supprimer">✖</button>
+        </div>
+      </li>
+    </transition-group>
+
+    <div style="margin-top:10px;color:#666;font-size:13px">
+      <em>Double-clique sur une tâche pour modifier (ou appuie sur Entrée / clique en-dehors pour valider).</em>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script>
+    const { createApp, ref, computed, watch, nextTick } = Vue;
+
+    createApp({
+      setup() {
+        const newTask = ref('');
+        const tasks = ref([]);
+        const filter = ref('all');
+        const editingId = ref(null);
+        const editText = ref('');
+        const editInput = ref(null);
+
+        const saved = localStorage.getItem('todo-vue-1');
+        if (saved) {
+          try { tasks.value = JSON.parse(saved); } catch(e){ tasks.value = []; }
+        }
+
+        function addTask() {
+          const text = newTask.value.trim();
+          if (!text) return;
+          tasks.value.push({ id: Date.now(), text, done: false, createdAt: new Date().toISOString() });
+          newTask.value = '';
+          save();
+        }
+
+        function removeTask(id) {
+          tasks.value = tasks.value.filter(t => t.id !== id);
+          save();
+        }
+
+        function startEdit(task) {
+          editingId.value = task.id;
+          editText.value = task.text;
+
+          nextTick(() => {
+            if (editInput.value && typeof editInput.value.focus === 'function') {
+              editInput.value.focus();
+            }
+          });
+        }
+
+        function finishEdit(task) {
+          const text = editText.value.trim();
+          if (!text) {
+            removeTask(task.id);
+          } else {
+            const t = tasks.value.find(x => x.id === task.id);
+            if (t) t.text = text;
+            save();
+          }
+          editingId.value = null;
+        }
+
+        function save() {
+          localStorage.setItem('todo-vue-1', JSON.stringify(tasks.value));
+        }
+        watch(tasks, () => save(), { deep: true });
+
+        const remaining = computed(() => tasks.value.filter(t => !t.done).length);
+        const filteredTasks = computed(() => {
+          if (filter.value === 'active') return tasks.value.filter(t => !t.done);
+          if (filter.value === 'completed') return tasks.value.filter(t => t.done);
+          return tasks.value;
+        });
+        function isEditing(task) { return editingId.value === task.id; }
+
+        function clearCompleted() {
+          tasks.value = tasks.value.filter(t => !t.done);
+          save();
+        }
+
+        return {
+          newTask, tasks, addTask, removeTask, startEdit, finishEdit,
+          editText, editInput, isEditing, remaining, filteredTasks,
+          filter, clearCompleted, save
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
